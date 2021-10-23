@@ -1,6 +1,6 @@
 import { Schema, model, SchemaTypes } from 'mongoose';
 
-const ClientSchema = new Schema({
+const PersonSchema = new Schema({
 	name: {
 		type: String,
 		required: true
@@ -17,23 +17,19 @@ const ClientSchema = new Schema({
 		type: String,
 		required: true
 	},
-	phoneNumber: {
-		type: String,
-		required: true
-	},
 	email: {
 		type: String,
 		required: true
 	},
-	creationDate: {
+	phoneNumber: {
 		type: String,
 		required: true
 	},
-	account: {
-		type: SchemaTypes.Map
-	}
+	// account: {
+	// 	type: SchemaTypes.Map
+	// }
 });
 
-export default model('clients', ClientSchema);
+export default model('persons', PersonSchema);
 
 

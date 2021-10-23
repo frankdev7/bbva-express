@@ -1,27 +1,28 @@
 import { Schema, model, SchemaTypes } from 'mongoose';
 
-const UsersSchema = new Schema({
-	id_person: {
+const WalletSchema = new Schema({
+	category: {
 		type: String,
 		required: true
 	},
-	password: {
+	creationdate: {
 		type: String,
 		required: true
 	},
-	status: {
+	id_usuario: {
 		type: String,
 		required: true
 	},
-	user_id: {
+    privatekey: {
 		type: String,
 		required: true
 	},
-	// token: {
-	// 	type: SchemaTypes.Map
-	// }
+    publickey: {
+		type: String,
+		required: true
+	},
 });
 
-export default model('users', UsersSchema);
+export default model('wallets', WalletSchema);
 
 

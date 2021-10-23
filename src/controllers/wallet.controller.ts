@@ -1,4 +1,6 @@
-import Client from '../models/Client.model';
+import Person from '../models/Person.model';
+import Users from '../models/Users.model';
+import Wallet from '../models/Wallet.model';
 import { Response, Request } from 'express';
 import { networkError, serverError, networkSuccess } from '../middlewares/response.middleware';
 import { TokenI } from '../domain/Token.model';
@@ -33,7 +35,7 @@ const createToken = async (request, response) => {
 
 const getAll = async (req: Request, res: Response) => {
 	try {
-		const client = await Client.find();
+		const client = await Person.find();
 		console.log(client);
 		networkSuccess(res, client, 'Listado de clients');
 	} catch (error) {
@@ -45,7 +47,7 @@ const getByDocument = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
 		const { id } = req.params;
-		const getData = await Client.findOne({documentNumber: id.toString()});
+		const getData = await Person.findOne({documentNumber: id.toString()});
 		console.log(getData);
 		if(getData){
 			response = {
@@ -71,18 +73,23 @@ const update = async (req: Request, res: Response) => {
 	try {
 		const client = req.body;
 		var randomWallet = ethers_1.ethers.Wallet.createRandom();
-		await generateUploadURL(client.documentNumber, randomWallet.privateKey)
 		// console.log(randomWallet.address);
 		// console.log(randomWallet.privateKey);
 		// console.log(randomWallet.mnemonic);
-		const getData = await Client.findOne({documentNumber: client.documentNumber});
-		let roots = getData['account'];
-		let data = roots.get('0');
-		data['token'] = randomWallet.address;
-		let newData = {account: {"0": data}};
-		await Client.updateOne({_id: getData['_id']}, newData);
+		const personData = await Person.findOne({documentNumber: client.documentNumber});
+		const userData = await Users.findOne({id_person: personData['_id']});
+		const walletData = await Wallet.findOne({id_usuario: userData['_id']});
+		//walletData['publickey'] = randomWallet.address;
+		//console.log(walletData['_id']);
+		 await Wallet.updateOne({id_usuario: userData['_id']}, {publickey: randomWallet.address});
+		 await generateUploadURL(client.documentNumber, randomWallet.privateKey);
 		response = {
-			data: null,
+			data: [
+				{
+				usuario: userData['user_id'],
+				public_key: randomWallet.address
+				}
+			],
 			message: 'Token actualizado correctamente',
 			success: true
 		}
@@ -97,10 +104,15 @@ const update = async (req: Request, res: Response) => {
 	}
 }
 
+const createWallet = () => {
+
+}
+
 
 export { 
 	createToken, 
 	getAll,
 	update,
-	getByDocument
+	getByDocument,
+	createWallet
 }
