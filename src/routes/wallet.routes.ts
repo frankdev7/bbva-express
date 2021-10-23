@@ -1,6 +1,6 @@
 // path - ruta : api/users
 import { Router } from 'express';
-import { createToken, getAll, update, getByDocument } from '../controllers/wallet.controller';
+import { createToken, getAll, update, getByDocument, getBBVTC } from '../controllers/wallet.controller';
 
 const router = Router();
 
@@ -8,5 +8,6 @@ const router = Router();
 router.get('/', getAll);
 router.patch('/', update)
 router.get('/document/:id', getByDocument)
+router.get('/getBBVTC', getBBVTC)
 
 export default router;
