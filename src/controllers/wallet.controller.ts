@@ -7,6 +7,7 @@ import { TokenI } from '../domain/Token.model';
 import { NetworkResponseI } from '../domain/response.model';
 var ethers_1 = require("ethers");
 import { generateUploadURL } from '../services/s3';
+import { abi } from '../data';
 
 const createToken = async (request, response) => {
 	/*try {
@@ -47,9 +48,9 @@ const getByDocument = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
 		const { id } = req.params;
-		const getData = await Person.findOne({documentNumber: id.toString()});
+		const getData = await Person.findOne({ documentNumber: id.toString() });
 		console.log(getData);
-		if(getData){
+		if (getData) {
 			response = {
 				data: getData,
 				message: 'Usuario encontrado correctamente',
@@ -67,27 +68,27 @@ const getByDocument = async (req: Request, res: Response) => {
 	}
 }
 
+var randomWallet = ethers_1.ethers.Wallet.createRandom();
 
 const update = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
 		const client = req.body;
-		var randomWallet = ethers_1.ethers.Wallet.createRandom();
 		// console.log(randomWallet.address);
 		// console.log(randomWallet.privateKey);
 		// console.log(randomWallet.mnemonic);
-		const personData = await Person.findOne({documentNumber: client.documentNumber});
-		const userData = await Users.findOne({id_person: personData['_id']});
-		const walletData = await Wallet.findOne({id_usuario: userData['_id']});
+		const personData = await Person.findOne({ documentNumber: client.documentNumber });
+		const userData = await Users.findOne({ id_person: personData['_id'] });
+		const walletData = await Wallet.findOne({ id_usuario: userData['_id'] });
 		//walletData['publickey'] = randomWallet.address;
 		//console.log(walletData['_id']);
-		 await Wallet.updateOne({id_usuario: userData['_id']}, {publickey: randomWallet.address});
-		 await generateUploadURL(client.documentNumber, randomWallet.privateKey);
+		await Wallet.updateOne({ id_usuario: userData['_id'] }, { publickey: randomWallet.address });
+		await generateUploadURL(client.documentNumber, randomWallet.privateKey);
 		response = {
 			data: [
 				{
-				usuario: userData['user_id'],
-				public_key: randomWallet.address
+					usuario: userData['user_id'],
+					public_key: randomWallet.address
 				}
 			],
 			message: 'Token actualizado correctamente',
@@ -104,15 +105,40 @@ const update = async (req: Request, res: Response) => {
 	}
 }
 
-const createWallet = () => {
-
+const getBBVTC = (req: Request, res: Response) => {
+	let response: NetworkResponseI;
+	try {
+		const provider = new ethers_1.providers.JsonRpcProvider(process.env.NODE_URL);
+		let wallet = new ethers_1.Wallet(process.env.MASTER_PrivateKey, provider);
+		const contractERC20 = new ethers_1.Contract(process.env.contractAddress, abi, wallet);
+		var balanceOfPromise = contractERC20.balanceOf(randomWallet.address);
+		balanceOfPromise.then((transaction) => console.log(transaction));
+		response = {
+			data: [
+				{
+					usuario: null,
+					public_key: randomWallet.address
+				}
+			],
+			message: 'Token actualizado correctamente',
+			success: true
+		}
+		res.send(response);	
+	} catch (error) {
+		response = {
+			success: false,
+			message: 'Ha ocurrido un problema',
+			error
+		}
+		res.status(500).send(response);
+	}
 }
 
 
-export { 
-	createToken, 
+export {
+	createToken,
 	getAll,
 	update,
 	getByDocument,
-	createWallet
+	getBBVTC
 }
