@@ -3,6 +3,8 @@ import Users from '../models/Users.model';
 import Wallet from '../models/Wallet.model';
 import Coin from '../models/Coin.model';
 import WalletxCoins from '../models/WalletxCoin.model';
+import Transaction from '../models/Transaction.model';
+import BBVAToken from '../models/BBVAToken.model';
 import { Response, Request } from 'express';
 import { networkError, serverError, networkSuccess } from '../middlewares/response.middleware';
 import { TokenI } from '../domain/Token.model';
@@ -52,7 +54,6 @@ const getByDocument = async (req: Request, res: Response) => {
 		const { id } = req.params;
 		const getData = await Person.findOne({ documentNumber: id.toString() });
 		if (getData != null) {
-			// const getData = await Person.findOne({ documentNumber: id.toString() });
 			var cliente = {
 				nombre : getData['name'],
 				email : getData['email'],
@@ -173,7 +174,8 @@ const transferBuy = async (req: Request, res: Response) => {
 		const coinData = await Coin.findOne({ name: crypto.toString() });
 		
 		// var amountCrypto = amount * coinData['valueSol']; // soles a crypto
-		var amountCrypto = amountCoin; // Obtener nuevo valor de blockchain
+		// Obtener nuevo valor de blockchain
+		// Obtener HASH
 		const userData = await Users.findOne({ user_id: user_id });
 		console.log('userData _id',userData['_id']);
 		const walletData = await Wallet.findOne({ id_usuario: userData['_id'] });
@@ -181,16 +183,23 @@ const transferBuy = async (req: Request, res: Response) => {
 
 		const walletxCoinsData = await WalletxCoins.findOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id'] });
 		if(walletxCoinsData == null) {
-			const walletxCoins = new WalletxCoins({ id_coin: coinData['_id'] , id_wallet: walletData['_id'], mount: amountCrypto });
+			const walletxCoins = new WalletxCoins({ id_coin: coinData['_id'] , id_wallet: walletData['_id'], mount: amountCoin });
 			await walletxCoins.save();
 		} else {
 			let currentMount = walletxCoinsData['mount'];
-			await WalletxCoins.updateOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id']}, { mount: currentMount + amountCrypto });
+			await WalletxCoins.updateOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id']}, { mount: currentMount + amountCoin });
 		}
 
 		console.log('userData id_person',userData['id_person']);
 		const personData = await Person.findOne({ _id: userData['id_person'] });
 		await Person.updateOne({ _id: personData['_id'] }, { balance: personData['balance'] - amountSoles });
+
+		// registrarTransaccion
+		var myDate = new Date();
+		var offset = '+5';  // e.g. if the timeZone is -5
+		var MyDateWithOffset = new Date( myDate.toUTCString() + offset );
+		const transaction = new Transaction({ amount: amountCoin , date_transaction: MyDateWithOffset, id_wallet: walletData['_id'], typecoin: crypto ,hash: "0957843295743289"});
+		await transaction.save();
 
 		response = {
 			message: 'Se realizó la compra correctamente',
@@ -233,6 +242,8 @@ const transferSell = async (req: Request, res: Response) => {
 		const personData = await Person.findOne({ _id: userData['id_person'] });
 		await Person.updateOne({ _id: personData['_id'] }, { balance: personData['balance'] + amountSoles });
 
+		// registrarTransaccion
+
 		response = {
 			message: 'Se realizó la compra correctamente',
 			success: true
@@ -265,7 +276,9 @@ const getBalance = async (req: Request, res: Response) => {
 		if(walletData == null){
 			throw "No se encontró wallet del usuario";
 		}
-		
+			
+		const transactionData = await Transaction.find({ id_wallet: walletData['_id'] });
+		const BBVATokenData = await BBVAToken.findOne({ id_wallet: walletData['_id'] });
 		let bbtc = 0;
 		let beth = 0;
 		let bbva = 0;
@@ -301,7 +314,9 @@ const getBalance = async (req: Request, res: Response) => {
 					BETH: beth,
 					BBVA: bbva,
 					ADA: ada,
-					COD: cod
+					COD: cod,
+					history: transactionData,
+					BBVATokens: BBVATokenData['mount']
 				},
 				message: 'Se realizó la consulta correctamente',
 				success: true
