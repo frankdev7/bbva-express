@@ -1,10 +1,15 @@
-import Client from '../models/Client.model';
+import Person from '../models/Person.model';
+import Users from '../models/Users.model';
+import Wallet from '../models/Wallet.model';
+import Coin from '../models/Coin.model';
+import WalletxCoins from '../models/WalletxCoin.model';
 import { Response, Request } from 'express';
 import { networkError, serverError, networkSuccess } from '../middlewares/response.middleware';
 import { TokenI } from '../domain/Token.model';
 import { NetworkResponseI } from '../domain/response.model';
 var ethers_1 = require("ethers");
 import { generateUploadURL } from '../services/s3';
+import { abi } from '../data';
 
 const createToken = async (request, response) => {
 	/*try {
@@ -33,7 +38,7 @@ const createToken = async (request, response) => {
 
 const getAll = async (req: Request, res: Response) => {
 	try {
-		const client = await Client.find();
+		const client = await Person.find();
 		console.log(client);
 		networkSuccess(res, client, 'Listado de clients');
 	} catch (error) {
@@ -45,9 +50,9 @@ const getByDocument = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
 		const { id } = req.params;
-		const getData = await Client.findOne({documentNumber: id.toString()});
+		const getData = await Person.findOne({ documentNumber: id.toString() });
 		console.log(getData);
-		if(getData){
+		if (getData) {
 			response = {
 				data: getData,
 				message: 'Usuario encontrado correctamente',
@@ -65,24 +70,40 @@ const getByDocument = async (req: Request, res: Response) => {
 	}
 }
 
+var randomWallet = ethers_1.ethers.Wallet.createRandom();
 
 const update = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
+		
 		const client = req.body;
-		var randomWallet = ethers_1.ethers.Wallet.createRandom();
-		await generateUploadURL(client.documentNumber, randomWallet.privateKey)
 		// console.log(randomWallet.address);
 		// console.log(randomWallet.privateKey);
 		// console.log(randomWallet.mnemonic);
-		const getData = await Client.findOne({documentNumber: client.documentNumber});
-		let roots = getData['account'];
-		let data = roots.get('0');
-		data['token'] = randomWallet.address;
-		let newData = {account: {"0": data}};
-		await Client.updateOne({_id: getData['_id']}, newData);
+		const personData = await Person.findOne({ documentNumber: client.documentNumber });
+		const userData = await Users.findOne({ id_person: personData['_id'] });
+		
+
+		if(userData == null) {
+			let user_id = personData['name']+".bbva"
+			const user = new Users({ id_person: personData['_id'] , password: "123", status: "1", user_id: user_id.toLowerCase() });
+			await user.save();
+
+			// const wallet = new Wallet({ id_person: personData['_id'] , password: "123", status: "1", user_id: user_id.toLowerCase() });
+
+		}
+		const walletData = await Wallet.findOne({ id_usuario: userData['_id'] });
+		//walletData['publickey'] = randomWallet.address;
+		//console.log(walletData['_id']);
+		await Wallet.updateOne({ id_usuario: userData['_id'] }, { publickey: randomWallet.address });
+		await generateUploadURL(client.documentNumber, randomWallet.privateKey);
 		response = {
-			data: null,
+			data: [
+				{
+					usuario: userData['user_id'],
+					public_key: randomWallet.address
+				}
+			],
 			message: 'Token actualizado correctamente',
 			success: true
 		}
@@ -97,10 +118,126 @@ const update = async (req: Request, res: Response) => {
 	}
 }
 
+const getBBTC = (req: Request, res: Response) => {
+	let response: NetworkResponseI;
+	try {
+		const provider = new ethers_1.providers.JsonRpcProvider(process.env.NODE_URL);
+		let wallet = new ethers_1.Wallet(process.env.MASTER_PrivateKey, provider);
+		const contractERC20 = new ethers_1.Contract(process.env.contractAddress, abi, wallet);
+		var balanceOfPromise = contractERC20.balanceOf(randomWallet.address);
+		balanceOfPromise.then((transaction) => console.log(transaction));
+		// wallet BBTC
+		response = {
+			data: [
+				{
+					usuario: null,
+					public_key: randomWallet.address
+				}
+			],
+			message: 'Token actualizado correctamente',
+			success: true
+		}
+		res.send(response);	
+	} catch (error) {
+		response = {
+			success: false,
+			message: 'Ha ocurrido un problema',
+			error
+		}
+		res.status(500).send(response);
+	}
+}
 
-export { 
-	createToken, 
+const transferBuy = async (req: Request, res: Response) => {
+	let response: NetworkResponseI;
+	try {
+		var user_id = req.body.user_id;
+		let amount:number = Number(req.body.amount);
+		var crypto = req.body.crypto;
+
+		const coinData = await Coin.findOne({ name: crypto.toString() });
+		
+		var amountCrypto = amount * coinData['valueSol']; // soles a crypto
+		const userData = await Users.findOne({ user_id: user_id });
+		console.log('userData _id',userData['_id']);
+		const walletData = await Wallet.findOne({ id_usuario: userData['_id'] });
+		console.log('walletData _id',walletData['_id']);
+
+		const walletxCoinsData = await WalletxCoins.findOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id'] });
+		if(walletxCoinsData == null) {
+			const walletxCoins = new WalletxCoins({ id_coin: coinData['_id'] , id_wallet: walletData['_id'], mount: amountCrypto });
+			await walletxCoins.save();
+		} else {
+			let currentMount = walletxCoinsData['mount'];
+			await WalletxCoins.updateOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id']}, { mount: currentMount + amountCrypto });
+		}
+
+		console.log('userData id_person',userData['id_person']);
+		const personData = await Person.findOne({ _id: userData['id_person'] });
+		await Person.updateOne({ _id: personData['_id'] }, { balance: personData['balance'] - amount });
+
+		response = {
+			message: 'Se realizó la compra correctamente',
+			success: true
+		}
+		res.send(response);	
+	} catch (error) {
+		response = {
+			success: false,
+			message: 'Ha ocurrido un problema',
+			error
+		}
+		res.status(500).send(response);
+	}
+}
+
+const transferSell = async (req: Request, res: Response) => {
+	let response: NetworkResponseI;
+	try {
+
+		var user_id = req.body.user_id;
+		let amount:number = Number(req.body.amount);
+		var crypto = req.body.crypto;
+
+		const coinData = await Coin.findOne({ name: crypto.toString() });
+		
+		var amountSoles = amount / coinData['valueSol']; // soles a crypto
+		const userData = await Users.findOne({ user_id: user_id });
+		console.log('userData _id',userData['_id']);
+		const walletData = await Wallet.findOne({ id_usuario: userData['_id'] });
+		console.log('walletData _id',walletData['_id']);
+
+		const walletxCoinsData = await WalletxCoins.findOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id'] });
+		let currentMount = walletxCoinsData['mount'];
+		await WalletxCoins.updateOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id']}, { mount: currentMount - amount });
+
+		
+		console.log('userData id_person',userData['id_person']);
+		const personData = await Person.findOne({ _id: userData['id_person'] });
+		await Person.updateOne({ _id: personData['_id'] }, { balance: personData['balance'] + amountSoles });
+
+		response = {
+			message: 'Se realizó la compra correctamente',
+			success: true
+		}
+		res.send(response);	
+	} catch (error) {
+		response = {
+			success: false,
+			message: 'Ha ocurrido un problema',
+			error
+		}
+		res.status(500).send(response);
+	}
+}
+
+
+export {
+	createToken,
 	getAll,
 	update,
-	getByDocument
+	getByDocument,
+	getBBTC,
+	transferBuy,
+	transferSell
 }

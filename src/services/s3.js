@@ -24,7 +24,7 @@ async function generateUploadURL(dni, token) {
         console.log("The file was succesfully saved!");
     });
     var params = {
-        Bucket: bucketName,
+        Bucket: process.env.AWS_BUCKET_NAME,
         Body: fs.createReadStream(filepath),
         Key: filepath
     };
