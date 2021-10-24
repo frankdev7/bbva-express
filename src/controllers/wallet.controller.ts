@@ -12,7 +12,8 @@ import { NetworkResponseI } from '../domain/response.model';
 var ethers_1 = require("ethers");
 import { generateUploadURL } from '../services/s3';
 import { abiBBTC } from '../data/bbtc';
-import { NEW_ACCOUNT_BALANCE, UNLIMITED } from '../data/';
+import { abiBETH } from '../data/beth';
+import { NEW_ACCOUNT_BALANCE, UNLIMITED, CIEN_MIL } from '../data/';
 
 const createToken = async (request, response) => {
 	/*try {
@@ -56,12 +57,12 @@ const getByDocument = async (req: Request, res: Response) => {
 		const getData = await Person.findOne({ documentNumber: id.toString() });
 		if (getData != null) {
 			var cliente = {
-				nombre : getData['name'],
-				email : getData['email'],
-				url : getData['url'],
-				cuenta : getData['cuenta'],
-				lastname : getData['lastName'],
-				saldo : getData['balance']
+				nombre: getData['name'],
+				email: getData['email'],
+				url: getData['url'],
+				cuenta: getData['cuenta'],
+				lastname: getData['lastName'],
+				saldo: getData['balance']
 			}
 			response = {
 				data: cliente,
@@ -205,12 +206,12 @@ const transferBuy = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
 		var user_id = req.body.user_id;
-		let amountCoin:number = Number(req.body.amountCoin);
-		let amountSoles:number = Number(req.body.amountSoles);
+		let amountCoin: number = Number(req.body.amountCoin);
+		let amountSoles: number = Number(req.body.amountSoles);
 		var crypto = req.body.crypto;
 
 		const coinData = await Coin.findOne({ name: crypto.toString() });
-		
+
 		// var amountCrypto = amount * coinData['valueSol']; // soles a crypto
 		// Obtener nuevo valor de blockchain
 		// Obtener HASH
@@ -219,31 +220,59 @@ const transferBuy = async (req: Request, res: Response) => {
 		const walletData = await Wallet.findOne({ id_usuario: userData['_id'] });
 		console.log('walletData _id', walletData['_id']);
 
-		const walletxCoinsData = await WalletxCoins.findOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id'] });
-		if(walletxCoinsData == null) {
-			const walletxCoins = new WalletxCoins({ id_coin: coinData['_id'] , id_wallet: walletData['_id'], mount: amountCoin });
-			await walletxCoins.save();
-		} else {
-			let currentMount = walletxCoinsData['mount'];
-			await WalletxCoins.updateOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id']}, { mount: currentMount + amountCoin });
+
+
+		// // Transfer coin from MASTER to client
+		const provider = new ethers_1.providers.JsonRpcProvider(process.env.NODE_URL);
+		let wallet = new ethers_1.Wallet(process.env.MASTER_PrivateKey, provider);
+		let contractERC20;
+		switch (coinData['name']) {
+			case 'BITCOIN':
+				contractERC20 = new ethers_1.Contract(process.env.BBTCcontractAddress, abiBBTC, wallet);
+				break;
+			case 'ETHEREUM':
+				contractERC20 = new ethers_1.Contract(process.env.BETHcontractAddress, abiBETH, wallet);
+				break;
+			default:
+				break;
 		}
 
-		console.log('userData id_person', userData['id_person']);
-		const personData = await Person.findOne({ _id: userData['id_person'] });
-		await Person.updateOne({ _id: personData['_id'] }, { balance: personData['balance'] - amountSoles });
+		var transferPromise = contractERC20.transfer(walletData['publickey'], amountCoin * CIEN_MIL);
 
-		// registrarTransaccion
-		var myDate = new Date();
-		var offset = '+5';  // e.g. if the timeZone is -5
-		var MyDateWithOffset = new Date( myDate.toUTCString() + offset );
-		const transaction = new Transaction({ amount: amountCoin , date_transaction: MyDateWithOffset, id_wallet: walletData['_id'], typecoin: crypto ,hash: "0957843295743289"});
-		await transaction.save();
 
-		response = {
-			message: 'Se realizó la compra correctamente',
-			success: true
-		}
-		res.send(response);
+		transferPromise.then(async (transactionBlockchain) => {
+			console.log(transactionBlockchain)
+
+			const walletxCoinsData = await WalletxCoins.findOne({ id_coin: coinData['_id'], id_wallet: walletData['_id'] });
+			if (walletxCoinsData == null) {
+				const walletxCoins = new WalletxCoins({ id_coin: coinData['_id'], id_wallet: walletData['_id'], mount: amountCoin });
+				await walletxCoins.save();
+			} else {
+				let currentMount = walletxCoinsData['mount'];
+				await WalletxCoins.updateOne({ id_coin: coinData['_id'], id_wallet: walletData['_id'] }, { mount: currentMount + amountCoin });
+			}
+
+			console.log('userData id_person', userData['id_person']);
+			const personData = await Person.findOne({ _id: userData['id_person'] });
+			await Person.updateOne({ _id: personData['_id'] }, { balance: personData['balance'] - amountSoles });
+
+			// registrarTransaccion
+			var myDate = new Date();
+			var offset = '+5';  // e.g. if the timeZone is -5
+			var MyDateWithOffset = new Date(myDate.toUTCString() + offset);
+			const transaction = new Transaction({ amount: amountCoin, date_transaction: MyDateWithOffset, id_wallet: walletData['_id'], typecoin: crypto, hash: transactionBlockchain.hash });
+			await transaction.save();
+
+			response = {
+				message: 'Se realizó la compra correctamente',
+				success: true
+			}
+			res.send(response);
+
+		}).catch((error) =>
+			console.log(error)
+		);
+
 	} catch (error) {
 		response = {
 			success: false,
@@ -258,12 +287,12 @@ const transferSell = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
 		var user_id = req.body.user_id;
-		let amountCoin:number = Number(req.body.amountCoin);
-		let amountSoles:number = Number(req.body.amountSoles);
+		let amountCoin: number = Number(req.body.amountCoin);
+		let amountSoles: number = Number(req.body.amountSoles);
 		var crypto = req.body.crypto;
 
 		const coinData = await Coin.findOne({ name: crypto.toString() });
-		
+
 		// var amountSoles = amount / coinData['valueSol']; // soles a crypto
 		// obtener nuevo valor de blockchain
 		const userData = await Users.findOne({ user_id: user_id });
@@ -273,7 +302,7 @@ const transferSell = async (req: Request, res: Response) => {
 
 		const walletxCoinsData = await WalletxCoins.findOne({ id_coin: coinData['_id'], id_wallet: walletData['_id'] });
 		let currentMount = walletxCoinsData['mount'];
-		await WalletxCoins.updateOne({ id_coin: coinData['_id'] , id_wallet: walletData['_id']}, { mount: currentMount - amountCoin });
+		await WalletxCoins.updateOne({ id_coin: coinData['_id'], id_wallet: walletData['_id'] }, { mount: currentMount - amountCoin });
 
 
 		console.log('userData id_person', userData['id_person']);
@@ -302,15 +331,15 @@ const getBalance = async (req: Request, res: Response) => {
 	try {
 		var user_id = req.body.user_id;
 		const userData = await Users.findOne({ user_id: user_id });
-		if(userData == null){
+		if (userData == null) {
 			throw "No se encontró datos del usuario";
 		}
 		const walletData = await Wallet.findOne({ id_usuario: userData['_id'] });
-		if(walletData == null){
+		if (walletData == null) {
 			throw "No se encontró wallet del usuario";
 		}
 		const walletxCoinsData = await WalletxCoins.find({ id_wallet: walletData['_id'] });
-		if(walletData == null){
+		if (walletData == null) {
 			throw "No se encontró wallet del usuario";
 		}
 			
@@ -324,24 +353,24 @@ const getBalance = async (req: Request, res: Response) => {
 		let cod = 0;
 
 		var bar = new Promise<void>((resolve, reject) => {
-			if(walletxCoinsData != null){
+			if (walletxCoinsData != null) {
 				walletxCoinsData.forEach(async (element, index, array) => {
 					const coinData = await Coin.findOne({ _id: element['id_coin'] });
-					if(coinData['name'] == 'BITCOIN') {
+					if (coinData['name'] == 'BITCOIN') {
 						bbtc = element['mount'];
-					} else if(coinData['name'] == 'BBVACOIN') {
+					} else if (coinData['name'] == 'BBVACOIN') {
 						bbva = element['mount'];
-					} else if(coinData['name'] == 'CODITEC') {
+					} else if (coinData['name'] == 'CODITEC') {
 						cod = element['mount'];
-					} else if(coinData['name'] == 'ADA') {
+					} else if (coinData['name'] == 'ADA') {
 						ada = element['mount'];
-					} else if(coinData['name'] == 'ETHEREUM') {
+					} else if (coinData['name'] == 'ETHEREUM') {
 						beth = element['mount'];
 					}
-					if (index === array.length -1) resolve();
-					
+					if (index === array.length - 1) resolve();
+
 				});
-	
+
 			}
 		});
 
@@ -360,7 +389,7 @@ const getBalance = async (req: Request, res: Response) => {
 				message: 'Se realizó la consulta correctamente',
 				success: true
 			}
-			res.send(response);	
+			res.send(response);
 		});
 
 	} catch (error) {
