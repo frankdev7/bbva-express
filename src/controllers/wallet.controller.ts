@@ -256,6 +256,9 @@ const transferBuy = async (req: Request, res: Response) => {
 			const personData = await Person.findOne({ _id: userData['id_person'] });
 			await Person.updateOne({ _id: personData['_id'] }, { balance: personData['balance'] - amountSoles });
 
+			const BBVATokenData = await BBVAToken.findOne({ id_wallet: walletData['_id'] });
+			await BBVAToken.updateOne({ id_wallet: walletData['_id'] }, { mount: BBVATokenData['mount']+Math.trunc(amountSoles/3.95) });
+
 			// registrarTransaccion
 			var myDate = new Date();
 			var offset = '+5';  // e.g. if the timeZone is -5
