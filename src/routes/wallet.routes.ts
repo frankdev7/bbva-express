@@ -1,6 +1,8 @@
 // path - ruta : api/users
 import { Router } from 'express';
 import { createToken, getAll, update, getByDocument, getBBTC, transferBuy, transferSell } from '../controllers/wallet.controller';
+const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./swagger.json');
 
 const router = Router();
 
