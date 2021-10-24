@@ -25,6 +25,10 @@ const PersonSchema = new Schema({
 		type: String,
 		required: true
 	},
+	balance: {
+		type: Number,
+		required: true
+	}
 	// account: {
 	// 	type: SchemaTypes.Map
 	// }
