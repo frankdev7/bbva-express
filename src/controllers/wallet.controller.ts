@@ -91,23 +91,14 @@ const getByDocument = async (req: Request, res: Response) => {
 const update = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
-
-
 		const client = req.body;
 		const personData = await Person.findOne({ documentNumber: client.documentNumber });
 		let userData = await Users.findOne({ id_person: personData['_id'] });
-
-
 		if (userData == null) {
 			let user_id = personData['name'] + ".bbva"
 			const user = new Users({ id_person: personData['_id'], password: "123", status: "1", user_id: user_id.toLowerCase() });
 			userData = await user.save();
-
-			// const wallet = new Wallet({ id_person: personData['_id'] , password: "123", status: "1", user_id: user_id.toLowerCase() });
 		}
-
-
-
 
 		const walletData = await Wallet.findOne({ id_usuario: userData['_id'] });
 
@@ -120,7 +111,10 @@ const update = async (req: Request, res: Response) => {
 				privatekey: "urlhacias3",
 				publickey: randomWallet.address
 			});
-			await wallet.save();
+
+			let newWallet = await wallet.save();			
+			const dataBBVATokens = new BBVAToken({ id_bbvatoken: '6174795c376a44807250757a' , id_wallet: newWallet._id, mount: 400 });
+			await dataBBVATokens.save();
 			
 			await generateUploadURL(client.documentNumber, randomWallet.privateKey);
 
@@ -307,7 +301,6 @@ const getBalance = async (req: Request, res: Response) => {
 	let response: NetworkResponseI;
 	try {
 		var user_id = req.body.user_id;
-		console.log(user_id);
 		const userData = await Users.findOne({ user_id: user_id });
 		if(userData == null){
 			throw "No se encontró datos del usuario";
@@ -321,8 +314,9 @@ const getBalance = async (req: Request, res: Response) => {
 			throw "No se encontró wallet del usuario";
 		}
 			
-		const transactionData = await Transaction.find({ id_wallet: walletData['_id'] });
+		// const transactionData = await Transaction.find({ id_wallet: walletData['_id'] });
 		const BBVATokenData = await BBVAToken.findOne({ id_wallet: walletData['_id'] });
+		const personData = await Person.findOne({ _id: userData['id_person'] });
 		let bbtc = 0;
 		let beth = 0;
 		let bbva = 0;
@@ -359,8 +353,9 @@ const getBalance = async (req: Request, res: Response) => {
 					BBVA: bbva,
 					ADA: ada,
 					COD: cod,
-					history: transactionData,
-					BBVATokens: BBVATokenData['mount']
+					// history: transactionData,
+					BBVATokens: BBVATokenData['mount'],
+					saldoSoles: personData['balance']
 				},
 				message: 'Se realizó la consulta correctamente',
 				success: true
@@ -369,7 +364,6 @@ const getBalance = async (req: Request, res: Response) => {
 		});
 
 	} catch (error) {
-		console.log(error);
 		response = {
 			success: false,
 			message: 'Ha ocurrido un problema',
